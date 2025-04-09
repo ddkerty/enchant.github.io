@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>강화 시뮬레이터</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; max-width: 1200px; margin: 0 auto; }
+    h1 { color: #333; }
+    .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 20px; }
+    .controls label { font-weight: bold; color: #495057; }
+    .controls input[type="number"] { width: 70px; padding: 5px; border: 1px solid #ced4da; border-radius: 4px; }
+    .btn { padding: 8px 16px; margin: 5px; border: none; border-radius: 4px; cursor: pointer; transition: background 0.3s; }
+    .btn-primary { background: #007bff; color: white; }
+    .btn-primary:hover { background: #0056b3; }
+    .btn-secondary { background: #6c757d; color: white; }
+    .btn-secondary:hover { background: #5a6268; }
+    table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+    th, td { border: 1px solid #ddd; padding: 10px; text-align: center; }
+    th { background: #e9ecef; color: #495057; }
+    #log { height: 200px; overflow-y: scroll; border: 1px solid #ddd; padding: 15px; background: #f8f9fa; border-radius: 4px; }
+    #stats { margin-top: 20px; padding: 15px; background: #f1f3f5; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>강화 시뮬레이터</h1>
+
+  <div class="controls">
+    <label>시작 단계: <input type="number" id="startLevel" value="0" min="0" /></label>
+    <label>목표 단계: <input type="number" id="targetLevel" value="9" min="1" /></label>
+    <button class="btn btn-primary" id="resetTable">테이블 초기화</button>
+    <button class="btn btn-secondary" id="loadWeapon">무기 강화</button>
+    <button class="btn btn-secondary" id="loadArmor">방어구 강화</button>
+    <button class="btn btn-secondary" id="loadAccessory">장신구 강화</button>
+    <button class="btn btn-secondary" id="addRow">행 추가</button>
+    <button class="btn btn-secondary" id="removeRow">행 삭제</button>
+  </div>
+
+  <table id="configTable">
+    <thead>
+      <tr>
+        <th>단계</th>
+        <th>소모 (Alz)</th>
+        <th>코어</th>
+        <th>대성공%</th>
+        <th>성공%</th>
+        <th>실패%</th>
+        <th>하락%</th>
+        <th>손상%</th>
+        <th>파괴%</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <button class="btn btn-primary" id="startSim">자동 강화 시작</button>
+
+  <h2>로그</h2>
+  <div id="log"></div>
+
+  <h2>통계</h2>
+  <div id="stats"></div>
+
+  <script>
+    const tableBody = document.querySelector('#configTable tbody');
+    const logDiv = document.getElementById('log');
+    const statsDiv = document.getElementById('stats');
+    const startInput = document.getElementById('startLevel');
+    const targetInput = document.getElementById('targetLevel');
+
+    // 강화 데이터 (샘플)
+    const configs = {
+      weapon: [
+        { cost: 2000, mat: 1, super: 0, success: 100, fail: 0, degrade: 0, damage: 0, destroy: 0 },
+        { cost: 2000, mat: 1, super: 0, success: 100, fail: 0, degrade: 0, damage: 0, destroy: 0 },
+        { cost: 2240, mat: 1, super: 0, success: 100, fail: 0, degrade: 0, damage: 0, destroy: 0 },
+        { cost: 2509, mat: 1, super: 0, success: 100, fail: 0, degrade: 0, damage: 0, destroy: 0 },
+        { cost: 2810, mat: 1, super: 0, success: 43, fail: 0, degrade: 0, damage: 57, destroy: 0 },
+        { cost: 3147, mat: 1, super: 0, success: 26, fail: 0, degrade: 0, damage: 74, destroy: 0 },
+        { cost: 13000, mat: 1, super: 0, success: 18, fail: 0, degrade: 0, damage: 82, destroy: 0 },
+        { cost: 15600, mat: 1, super: 0, success: 13, fail: 0, degrade: 0, damage: 87, destroy: 0 },
+        { cost: 18720, mat: 1, super: 0, success: 10, fail: 0, degrade: 0, damage: 90, destroy: 0 },
+        { cost: 22464, mat: 1, super: 0, success: 10, fail: 0, degrade: 0, damage: 90, destroy: 0 },
+      ],
+      armor: [
+        { cost: 2000, mat: 1, super: 0, success: 100, fail: 0, degrade: 0, damage: 0, destroy: 0 },
+        { cost: 2000, mat: 1, super: 0, success: 100, fail: 0, degrade: 0, damage: 0, destroy: 0 },
+        { cost: 2240, mat: 1, super: 0, success: 100, fail: 0, degrade: 0, damage: 0, destroy: 0 },
+        { cost: 2810, mat: 1, super: 0, success: 51, fail: 0, degrade: 0, damage: 49, destroy: 0 },
+        { cost: 3147, mat: 1, super: 0, success: 28, fail: 0, degrade: 0, damage: 72, destroy: 0 },
+        { cost: 13000, mat: 1, super: 0, success: 18, fail: 0, degrade: 0, damage: 82, destroy: 0 },
+        { cost: 15600, mat: 1, super: 0, success: 13, fail: 0, degrade: 0, damage: 87, destroy: 0 },
+        { cost: 18720, mat: 1, super: 0, success: 10, fail: 0, degrade: 0, damage: 90, destroy: 0 },
+        { cost: 22464, mat: 1, super: 0, success: 10, fail: 0, degrade: 0, damage: 90, destroy: 0 },
+      ],
+      accessory: [
+        { cost: 2000, mat: 1, super: 0, success: 100, fail: 0, degrade: 0, damage: 0, destroy: 0 },
+        { cost: 2240, mat: 1, super: 0, success: 40, fail: 0, degrade: 0, damage: 60, destroy: 0 },
+        { cost: 2509, mat: 1, super: 0, success: 30, fail: 0, degrade: 0, damage: 70, destroy: 0 },
+        { cost: 3147, mat: 1, super: 0, success: 23, fail: 0, degrade: 0, damage: 77, destroy: 0 },
+        { cost: 13000, mat: 1, super: 0, success: 19, fail: 0, degrade: 0, damage: 81, destroy: 0 },
+        { cost: 13000, mat: 1, super: 0, success: 15, fail: 0, degrade: 0, damage: 85, destroy: 0 },
+        { cost: 18720, mat: 1, super: 0, success: 13, fail: 0, degrade: 0, damage: 87, destroy: 0 },
+        { cost: 22464, mat: 1, super: 0, success: 10, fail: 0, degrade: 0, damage: 90, destroy: 0 },
+      ]
+    };
+
+    // 테이블 동적 생성
+    function rebuildTable(type = 'weapon') {
+      tableBody.innerHTML = '';
+      const start = parseInt(startInput.value) || 0;
+      const target = parseInt(targetInput.value) || 9;
+      if (start > target) { alert('시작 단계는 목표 단계보다 클 수 없습니다.'); return; }
+      for (let lvl = start; lvl <= target; lvl++) {
+        const idx = lvl;
+        const cfgArr = configs[type];
+        const config = cfgArr[idx] || cfgArr[cfgArr.length - 1];
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${lvl}</td>
+          <td><input type="number" value="${config.cost}" min="0" /></td>
+          <td><input type="number" value="${config.mat}" min="0" /></td>
+          <td><input type="number" value="${config.super}" min="0" max="100" /></td>
+          <td><input type="number" value="${config.success}" min="0" max="100" /></td>
+          <td><input type="number" value="${config.fail}" min="0" max="100" /></td>
+          <td><input type="number" value="${config.degrade}" min="0" max="100" /></td>
+          <td><input type="number" value="${config.damage}" min="0" max="100" /></td>
+          <td><input type="number" value="${config.destroy}" min="0" max="100" /></td>
+        `;
+        tableBody.appendChild(row);
+      }
+    }
+
+    // 버튼 이벤트
+    document.getElementById('resetTable').onclick = () => rebuildTable('weapon');
+    document.getElementById('loadWeapon').onclick = () => rebuildTable('weapon');
+    document.getElementById('loadArmor').onclick = () => rebuildTable('armor');
+    document.getElementById('loadAccessory').onclick = () => rebuildTable('accessory');
+
+    document.getElementById('addRow').onclick = () => {
+      const rows = tableBody.querySelectorAll('tr');
+      const last = rows.length ? parseInt(rows[rows.length - 1].cells[0].textContent) + 1 : 0;
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td>${last}</td>
+        <td><input type="number" value="0" min="0" /></td>
+        <td><input type="number" value="0" min="0" /></td>
+        <td><input type="number" value="0" min="0" max="100" /></td>
+        <td><input type="number" value="0" min="0" max="100" /></td>
+        <td><input type="number" value="0" min="0" max="100" /></td>
+        <td><input type="number" value="0" min="0" max="100" /></td>
+        <td><input type="number" value="0" min="0" max="100" /></td>
+        <td><input type="number" value="0" min="0" max="100" /></td>
+      `;
+      tableBody.appendChild(row);
+    };
+    document.getElementById('removeRow').onclick = () => {
+      const rows = tableBody.querySelectorAll('tr');
+      if (rows.length) rows[rows.length - 1].remove();
+    };
+
+    // 로그 출력
+    function log(msg) {
+      const p = document.createElement('p');
+      p.textContent = msg;
+      logDiv.appendChild(p);
+      logDiv.scrollTop = logDiv.scrollHeight;
+    }
+
+    // 시뮬레이션 시작
+    document.getElementById('startSim').onclick = () => {
+      const start = parseInt(startInput.value) || 0;
+      const target = parseInt(targetInput.value) || 9;
+      if (start < 0 || target < 1) { alert('시작 단계는 0 이상, 목표 단계는 1 이상이어야 합니다.'); return; }
+      if (start > target) { alert('시작 단계는 목표 단계보다 클 수 없습니다.'); return; }
+
+      log(`자동 강화 시작: 단계 ${start} → 목표 ${target}`);
+      statsDiv.innerHTML = '<p>시뮬레이션 진행 중...</p>';
+      logDiv.innerHTML = '';
+
+      const rows = Array.from(tableBody.querySelectorAll('tr'));
+      let attempts = 0, totalCost = 0, totalMat = 0, successCount = 0;
+      const stats = { super: 0, success: 0, fail: 0, degrade: 0, damage: 0, destroy: 0 };
+
+      while (successCount < 1) { // 목표 달성 전까지 반복
+        let current = start, itemAttempts = 0, itemCost = 0, itemMat = 0;
+        let damaged = false, destroyed = false;
+
+        while (current < target && !damaged && !destroyed) {
+          attempts++;
+          itemAttempts++;
+          const row = rows.find(r => parseInt(r.cells[0].textContent) === current);
+          if (!row) { alert(`단계 ${current} 행이 없습니다.`); return; }
+          const inputs = row.querySelectorAll('input');
+          const cost = parseInt(inputs[0].value) || 0;
+          const mat = parseInt(inputs[1].value) || 0;
+          const probs = [2, 3, 4, 5, 6, 7].map(i => parseFloat(inputs[i].value) || 0);
+          const labels = ['super', 'success', 'fail', 'degrade', 'damage', 'destroy'];
+          const totalProb = probs.reduce((a, b) => a + b, 0);
+          if (totalProb !== 100) { alert(`단계 ${current} 확률 합 ${totalProb}% 오류`); return; }
+
+          let rand = Math.random() * 100, cum = 0, outcome;
+          for (let i = 0; i < probs.length; i++) {
+            cum += probs[i];
+            if (rand <= cum) { outcome = labels[i]; break; }
+          }
+
+          itemCost += cost; totalCost += cost;
+          itemMat += mat; totalMat += mat;
+          stats[outcome]++;
+
+          if (outcome === 'super') {
+            current = Math.min(target, current + 2);
+            log(`시도 #${attempts}: 대성공 → ${current}`);
+          } else if (outcome === 'success') {
+            current = Math.min(target, current + 1);
+            log(`시도 #${attempts}: 성공 → ${current}`);
+          } else if (outcome === 'fail') {
+            log(`시도 #${attempts}: 실패 → ${current}`);
+          } else if (outcome === 'degrade') {
+            current = Math.max(start, current - 1);
+            log(`시도 #${attempts}: 하락 → ${current}`);
+          } else if (outcome === 'damage') {
+            damaged = true;
+            log(`시도 #${attempts}: 손상 → 새로운 아이템으로 재시도`);
+          } else if (outcome === 'destroy') {
+            destroyed = true;
+            log(`시도 #${attempts}: 파괴 → 새로운 아이템으로 재시도`);
+          }
+
+          if (current >= target) {
+            successCount++;
+            log(`목표 달성! 총 시도: ${attempts}, 총 비용: ${totalCost.toLocaleString()} Alz, 총 코어: ${totalMat}`);
+          }
+        }
+
+        if (damaged || destroyed) {
+          log(`아이템 손상/파괴로 새로운 아이템으로 재시도`);
+        }
+      }
+
+      statsDiv.innerHTML = `<p>목표 달성에 성공했습니다!</p>
+        <p>총 시도 횟수: ${attempts}</p>
+        <p>총 소모 Alz: ${totalCost.toLocaleString()}, 총 코어: ${totalMat}</p>
+        <p>대성공: ${stats.super}, 성공: ${stats.success}, 실패: ${stats.fail}</p>
+        <p>하락: ${stats.degrade}, 손상: ${stats.damage}, 파괴: ${stats.destroy}</p>`;
+    };
+
+    // 초기 로드
+    rebuildTable('weapon');
+  </script>
+</body>
+</html>
